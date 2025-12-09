@@ -45,33 +45,44 @@ exports.login = async (req, res) => {
 // Schedule exam for specific date/time
 exports.scheduleExam = async (req, res) => {
   try {
-    console.log('Schedule exam endpoint called:', req.body);
+    console.log('=== Schedule Exam Called ===');
+    console.log('Request body:', req.body);
+    
     const { scheduledStartTime } = req.body;
     
     if (!scheduledStartTime) {
+      console.log('Error: No scheduledStartTime provided');
       return res.status(400).json({ message: 'Scheduled start time is required' });
     }
 
     const scheduledTime = new Date(scheduledStartTime);
     const now = new Date();
+    
+    console.log('Scheduled time:', scheduledTime);
+    console.log('Current time:', now);
 
     if (scheduledTime <= now) {
+      console.log('Error: Scheduled time is in the past');
       return res.status(400).json({ message: 'Scheduled time must be in the future' });
     }
 
+    console.log('Finding ExamControl...');
     let examControl = await ExamControl.findOne();
     if (!examControl) {
+      console.log('Creating new ExamControl...');
       examControl = await ExamControl.create({});
     }
+    console.log('ExamControl found/created');
 
     // Calculate exam duration
     const totalQuestions = examControl.totalQuestions || 5;
     const questionTimeLimit = examControl.questionTimeLimit || 7;
     const calculatedDuration = totalQuestions * questionTimeLimit;
-
-    // Calculate countdown (time from now until scheduled start)
     const countdownSeconds = Math.floor((scheduledTime - now) / 1000);
 
+    console.log('Updating ExamControl with scheduled times...');
+    
+    // Update fields individually to avoid validation issues
     examControl.isExamActive = true;
     examControl.isCountdownActive = true;
     examControl.countdownStartTime = now;
@@ -80,27 +91,24 @@ exports.scheduleExam = async (req, res) => {
     examControl.calculatedDuration = calculatedDuration;
     examControl.currentGlobalQuestion = 0;
     examControl.lastQuestionChangeTime = scheduledTime;
-    // Don't save countdownDuration to avoid validation error (it has max: 300)
-    // countdownDuration is only used for immediate start, not scheduled
+    
+    console.log('Saving ExamControl...');
     await examControl.save();
+    console.log('ExamControl saved successfully');
 
-    // Emit to all students immediately (if socket.io is available)
+    // Emit to all students
     if (req.io) {
+      console.log('Emitting socket event...');
       req.io.emit('exam-countdown-started', {
         countdownSeconds: countdownSeconds,
         countdownStartTime: now,
         actualStartTime: scheduledTime,
         message: `Exam scheduled to start at ${scheduledTime.toLocaleString()}`
       });
-      console.log('Emitted exam-countdown-started event');
-    } else {
-      console.warn('Socket.io not available, skipping event emission');
+      console.log('Socket event emitted');
     }
 
-    // NOTE: We don't use setTimeout on production servers (they can restart)
-    // Instead, the exam will auto-start when students check status after scheduled time
-    // See examController.js startExam() for the auto-start logic
-
+    console.log('Sending success response');
     res.json({
       message: 'Exam scheduled successfully',
       scheduledStartTime: scheduledTime,
@@ -108,13 +116,17 @@ exports.scheduleExam = async (req, res) => {
       examEndTime: examControl.examEndTime,
       duration: `${calculatedDuration} seconds (${totalQuestions} questions × ${questionTimeLimit}s each)`
     });
+    console.log('=== Schedule Exam Completed Successfully ===');
   } catch (error) {
-    console.error('Schedule exam error:', error);
+    console.error('=== Schedule Exam Error ===');
+    console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    
     res.status(500).json({ 
       message: 'Failed to schedule exam', 
       error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      errorName: error.name
     });
   }
 };
