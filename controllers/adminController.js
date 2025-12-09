@@ -42,6 +42,108 @@ exports.login = async (req, res) => {
   }
 };
 
+// Schedule exam for specific date/time
+exports.scheduleExam = async (req, res) => {
+  try {
+    const { scheduledStartTime } = req.body;
+    
+    if (!scheduledStartTime) {
+      return res.status(400).json({ message: 'Scheduled start time is required' });
+    }
+
+    const scheduledTime = new Date(scheduledStartTime);
+    const now = new Date();
+
+    if (scheduledTime <= now) {
+      return res.status(400).json({ message: 'Scheduled time must be in the future' });
+    }
+
+    let examControl = await ExamControl.findOne();
+    if (!examControl) {
+      examControl = await ExamControl.create({});
+    }
+
+    // Calculate exam duration
+    const totalQuestions = examControl.totalQuestions || 5;
+    const questionTimeLimit = examControl.questionTimeLimit || 7;
+    const calculatedDuration = totalQuestions * questionTimeLimit;
+
+    // Calculate countdown (time from now until scheduled start)
+    const countdownSeconds = Math.floor((scheduledTime - now) / 1000);
+
+    examControl.isExamActive = true;
+    examControl.isCountdownActive = true;
+    examControl.countdownStartTime = now;
+    examControl.examStartTime = scheduledTime;
+    examControl.examEndTime = new Date(scheduledTime.getTime() + (calculatedDuration * 1000));
+    examControl.calculatedDuration = calculatedDuration;
+    examControl.currentGlobalQuestion = 0;
+    examControl.lastQuestionChangeTime = scheduledTime;
+    examControl.countdownDuration = countdownSeconds;
+    await examControl.save();
+
+    // Emit to all students immediately
+    req.io.emit('exam-countdown-started', {
+      countdownSeconds: countdownSeconds,
+      countdownStartTime: now,
+      actualStartTime: scheduledTime,
+      message: `Exam scheduled to start at ${scheduledTime.toLocaleString()}`
+    });
+
+    // Schedule the actual exam start
+    const timeUntilStart = scheduledTime - now;
+    setTimeout(async () => {
+      try {
+        const control = await ExamControl.findOne();
+        if (control && control.isExamActive) {
+          control.isCountdownActive = false;
+          await control.save();
+
+          // Activate all waiting sessions
+          await ExamSession.updateMany(
+            { isWaitingForStart: true },
+            { isActive: true, isWaitingForStart: false }
+          );
+
+          // Emit exam actually started event
+          req.io.emit('exam-actually-started', {
+            startTime: control.examStartTime,
+            message: 'Exam has started! Beginning now...'
+          });
+
+          // Start global question timer
+          startGlobalQuestionTimer(req.io, control);
+        }
+      } catch (error) {
+        console.error('Failed to start scheduled exam:', error);
+      }
+    }, timeUntilStart);
+
+    // Auto-stop exam after scheduled time + exam duration
+    const totalDuration = timeUntilStart + (calculatedDuration * 1000);
+    setTimeout(async () => {
+      try {
+        const control = await ExamControl.findOne();
+        if (control && control.isExamActive) {
+          await autoStopExam(req.io);
+        }
+      } catch (error) {
+        console.error('Auto-stop scheduled exam failed:', error);
+      }
+    }, totalDuration);
+
+    res.json({
+      message: 'Exam scheduled successfully',
+      scheduledStartTime: scheduledTime,
+      countdownSeconds: countdownSeconds,
+      examEndTime: examControl.examEndTime,
+      duration: `${calculatedDuration} seconds (${totalQuestions} questions × ${questionTimeLimit}s each)`
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to schedule exam', error: error.message });
+  }
+};
+
 exports.startExamForAll = async (req, res) => {
   try {
     let examControl = await ExamControl.findOne();
@@ -54,8 +156,7 @@ exports.startExamForAll = async (req, res) => {
     const questionTimeLimit = examControl.questionTimeLimit || 7;
     const calculatedDuration = totalQuestions * questionTimeLimit; // in seconds
 
-    const startTime = new Date();
-    const endTime = new Date(startTime.getTime() + calculatedDuration * 1000);
+    const now = new Date();
 
     // Get countdown duration from settings (default 30 seconds)
     const countdownDuration = examControl.countdownDuration || 30;
@@ -63,12 +164,12 @@ exports.startExamForAll = async (req, res) => {
 
     examControl.isExamActive = true;
     examControl.isCountdownActive = true;
-    examControl.examStartTime = new Date(startTime.getTime() + countdownMs); // Actual start after countdown
-    examControl.examEndTime = new Date(startTime.getTime() + countdownMs + (calculatedDuration * 1000));
+    examControl.countdownStartTime = now;
+    examControl.examStartTime = new Date(now.getTime() + countdownMs); // Actual start after countdown
+    examControl.examEndTime = new Date(now.getTime() + countdownMs + (calculatedDuration * 1000));
     examControl.calculatedDuration = calculatedDuration;
     examControl.currentGlobalQuestion = 0;
-    examControl.lastQuestionChangeTime = new Date(startTime.getTime() + countdownMs);
-    examControl.countdownStartTime = startTime; // When countdown started
+    examControl.lastQuestionChangeTime = new Date(now.getTime() + countdownMs);
     await examControl.save();
 
     // Emit countdown start event

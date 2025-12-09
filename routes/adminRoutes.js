@@ -5,6 +5,7 @@ const adminMiddleware = require('../middlewares/adminMiddleware');
 
 router.post('/login', adminController.login);
 router.post('/exam/start', adminMiddleware, adminController.startExamForAll);
+router.post('/exam/schedule', adminMiddleware, adminController.scheduleExam);
 router.post('/exam/stop', adminMiddleware, adminController.stopExamForAll);
 router.post('/exam/clear', adminMiddleware, adminController.clearExamData);
 router.get('/exam/status', adminMiddleware, adminController.getExamStatus);
