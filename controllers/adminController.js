@@ -114,6 +114,50 @@ exports.scheduleExam = async (req, res) => {
       console.log('Socket event emitted');
     }
 
+    // Schedule automatic exam start when countdown ends
+    // Trigger 500ms early to ensure backend is ready before students' countdown ends
+    const countdownMs = countdownSeconds * 1000;
+    const triggerEarlyMs = Math.max(0, countdownMs - 500); // Start 500ms early, but not negative
+    console.log(`Setting timeout for ${countdownSeconds} seconds (triggering at ${triggerEarlyMs}ms for instant start)`);
+    
+    setTimeout(async () => {
+      try {
+        console.log('=== Countdown Ending - Pre-Starting Exam (500ms early for instant transition) ===');
+        const control = await ExamControl.findOne();
+        if (control && control.isExamActive && control.isCountdownActive) {
+          console.log('Updating ExamControl: isCountdownActive = false');
+          control.isCountdownActive = false;
+          await control.save();
+
+          // Activate all waiting sessions
+          console.log('Activating all waiting sessions...');
+          const result = await ExamSession.updateMany(
+            { isWaitingForStart: true },
+            { isActive: true, isWaitingForStart: false }
+          );
+          console.log(`Activated ${result.modifiedCount} sessions - INSTANT START READY`);
+
+          // Emit exam actually started event
+          if (req.io) {
+            console.log('Emitting exam-actually-started event...');
+            req.io.emit('exam-actually-started', {
+              startTime: control.examStartTime,
+              message: 'Exam has started! Beginning now...'
+            });
+            console.log('Event emitted successfully');
+          }
+
+          // Start global question timer
+          console.log('Starting global question timer...');
+          startGlobalQuestionTimer(req.io, control);
+        } else {
+          console.log('Exam was stopped or already started, skipping auto-start');
+        }
+      } catch (error) {
+        console.error('Failed to auto-start exam after countdown:', error);
+      }
+    }, triggerEarlyMs);
+
     console.log('Sending success response');
     res.json({
       message: 'Exam scheduled successfully',

@@ -17,9 +17,17 @@ const examSecurityMiddleware = async (req, res, next) => {
       return res.status(404).json({ message: 'No active exam session found' });
     }
     
-    // If session is waiting, don't allow question access yet
+    // If session is waiting, only allow preloading first question (for instant start)
     if (session.isWaitingForStart) {
-      return res.status(403).json({ message: 'Exam has not started yet. Please wait for countdown to finish.' });
+      // Allow GET /exam/question/0 for preloading (instant start optimization)
+      const isPreloadingFirstQuestion = req.method === 'GET' && req.path.includes('/question/0');
+      
+      if (!isPreloadingFirstQuestion) {
+        return res.status(403).json({ message: 'Exam has not started yet. Please wait for countdown to finish.' });
+      }
+      
+      // Allow preload but mark it in logs
+      console.log(`Allowing preload of first question for user ${userId} during countdown`);
     }
 
     // Check if exam has expired (only for active sessions)
