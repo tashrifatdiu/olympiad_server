@@ -90,47 +90,9 @@ exports.scheduleExam = async (req, res) => {
       message: `Exam scheduled to start at ${scheduledTime.toLocaleString()}`
     });
 
-    // Schedule the actual exam start
-    const timeUntilStart = scheduledTime - now;
-    setTimeout(async () => {
-      try {
-        const control = await ExamControl.findOne();
-        if (control && control.isExamActive) {
-          control.isCountdownActive = false;
-          await control.save();
-
-          // Activate all waiting sessions
-          await ExamSession.updateMany(
-            { isWaitingForStart: true },
-            { isActive: true, isWaitingForStart: false }
-          );
-
-          // Emit exam actually started event
-          req.io.emit('exam-actually-started', {
-            startTime: control.examStartTime,
-            message: 'Exam has started! Beginning now...'
-          });
-
-          // Start global question timer
-          startGlobalQuestionTimer(req.io, control);
-        }
-      } catch (error) {
-        console.error('Failed to start scheduled exam:', error);
-      }
-    }, timeUntilStart);
-
-    // Auto-stop exam after scheduled time + exam duration
-    const totalDuration = timeUntilStart + (calculatedDuration * 1000);
-    setTimeout(async () => {
-      try {
-        const control = await ExamControl.findOne();
-        if (control && control.isExamActive) {
-          await autoStopExam(req.io);
-        }
-      } catch (error) {
-        console.error('Auto-stop scheduled exam failed:', error);
-      }
-    }, totalDuration);
+    // NOTE: We don't use setTimeout on production servers (they can restart)
+    // Instead, the exam will auto-start when students check status after scheduled time
+    // See examController.js startExam() for the auto-start logic
 
     res.json({
       message: 'Exam scheduled successfully',
@@ -140,6 +102,7 @@ exports.scheduleExam = async (req, res) => {
       duration: `${calculatedDuration} seconds (${totalQuestions} questions × ${questionTimeLimit}s each)`
     });
   } catch (error) {
+    console.error('Schedule exam error:', error);
     res.status(500).json({ message: 'Failed to schedule exam', error: error.message });
   }
 };
