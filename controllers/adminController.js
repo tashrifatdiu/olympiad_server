@@ -45,6 +45,7 @@ exports.login = async (req, res) => {
 // Schedule exam for specific date/time
 exports.scheduleExam = async (req, res) => {
   try {
+    console.log('Schedule exam endpoint called:', req.body);
     const { scheduledStartTime } = req.body;
     
     if (!scheduledStartTime) {
