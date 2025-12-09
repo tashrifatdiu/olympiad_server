@@ -55,11 +55,17 @@ exports.scheduleExam = async (req, res) => {
       return res.status(400).json({ message: 'Scheduled start time is required' });
     }
 
+    // Parse the scheduled time
+    // If it comes as ISO string, it's already in UTC
+    // If it comes without timezone, treat as UTC
     const scheduledTime = new Date(scheduledStartTime);
     const now = new Date();
     
-    console.log('Scheduled time:', scheduledTime);
-    console.log('Current time:', now);
+    console.log('Received scheduledStartTime:', scheduledStartTime);
+    console.log('Parsed scheduled time (UTC):', scheduledTime.toISOString());
+    console.log('Parsed scheduled time (Local):', scheduledTime.toLocaleString());
+    console.log('Current time (UTC):', now.toISOString());
+    console.log('Current time (Local):', now.toLocaleString());
 
     if (scheduledTime <= now) {
       console.log('Error: Scheduled time is in the past');
