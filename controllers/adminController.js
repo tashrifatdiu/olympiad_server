@@ -137,102 +137,13 @@ exports.scheduleExam = async (req, res) => {
   }
 };
 
+// Legacy endpoint - no longer used (replaced by scheduleExam)
+// Kept for backward compatibility but not recommended
 exports.startExamForAll = async (req, res) => {
-  try {
-    let examControl = await ExamControl.findOne();
-    if (!examControl) {
-      examControl = await ExamControl.create({});
-    }
-
-    // Calculate exam duration based on questions and time per question
-    const totalQuestions = examControl.totalQuestions || 5;
-    const questionTimeLimit = examControl.questionTimeLimit || 7;
-    const calculatedDuration = totalQuestions * questionTimeLimit; // in seconds
-
-    const now = new Date();
-
-    // Get countdown duration from settings (default 30 seconds)
-    const countdownDuration = examControl.countdownDuration || 30;
-    const countdownMs = countdownDuration * 1000;
-
-    examControl.isExamActive = true;
-    examControl.isCountdownActive = true;
-    examControl.countdownStartTime = now;
-    examControl.examStartTime = new Date(now.getTime() + countdownMs); // Actual start after countdown
-    examControl.examEndTime = new Date(now.getTime() + countdownMs + (calculatedDuration * 1000));
-    examControl.calculatedDuration = calculatedDuration;
-    examControl.currentGlobalQuestion = 0;
-    examControl.lastQuestionChangeTime = new Date(now.getTime() + countdownMs);
-    await examControl.save();
-
-    // Emit countdown start event
-    req.io.emit('exam-countdown-started', {
-      countdownSeconds: countdownDuration,
-      countdownStartTime: startTime, // When countdown actually started
-      actualStartTime: examControl.examStartTime,
-      message: `Exam will start in ${countdownDuration} seconds. Get ready!`
-    });
-
-    // After countdown duration, start the actual exam
-    setTimeout(async () => {
-      try {
-        const control = await ExamControl.findOne();
-        if (control && control.isExamActive) {
-          control.isCountdownActive = false;
-          await control.save();
-
-          // Activate all waiting sessions
-          await ExamSession.updateMany(
-            { isWaitingForStart: true },
-            { isActive: true, isWaitingForStart: false }
-          );
-
-          // Emit exam actually started event
-          req.io.emit('exam-actually-started', {
-            startTime: control.examStartTime,
-            message: 'Exam has started! Beginning now...'
-          });
-
-          // Start global question timer
-          startGlobalQuestionTimer(req.io, control);
-        }
-      } catch (error) {
-        console.error('Failed to start exam after countdown:', error);
-      }
-    }, countdownMs);
-
-    // Emit socket event to all connected clients
-    req.io.emit('exam-started', {
-      startTime: examControl.examStartTime,
-      endTime: examControl.examEndTime,
-      questionTimeLimit: examControl.questionTimeLimit,
-      totalQuestions: examControl.totalQuestions,
-      duration: calculatedDuration
-    });
-
-    // Auto-stop exam after countdown + exam duration
-    const totalDuration = countdownMs + (calculatedDuration * 1000);
-    setTimeout(async () => {
-      try {
-        const control = await ExamControl.findOne();
-        if (control && control.isExamActive) {
-          await autoStopExam(req.io);
-        }
-      } catch (error) {
-        console.error('Auto-stop exam failed:', error);
-      }
-    }, totalDuration);
-
-    res.json({
-      message: `Exam countdown started! Students have ${countdownDuration} seconds to join.`,
-      examControl,
-      countdownSeconds: countdownDuration,
-      actualStartTime: examControl.examStartTime,
-      duration: `${calculatedDuration} seconds (${totalQuestions} questions × ${questionTimeLimit}s each)`
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to start exam', error: error.message });
-  }
+  res.status(410).json({ 
+    message: 'This endpoint is deprecated. Please use /api/admin/exam/schedule instead.',
+    deprecated: true
+  });
 };
 
 // Global question timer
@@ -472,7 +383,7 @@ exports.disqualifyStudent = async (req, res) => {
 
 exports.updateExamSettings = async (req, res) => {
   try {
-    const { questionTimeLimit, disqualifyOnFullscreenExit, totalQuestions, countdownDuration } = req.body;
+    const { questionTimeLimit, disqualifyOnFullscreenExit, totalQuestions } = req.body;
 
     let examControl = await ExamControl.findOne();
     if (!examControl) {
@@ -488,12 +399,7 @@ exports.updateExamSettings = async (req, res) => {
     if (totalQuestions !== undefined) {
       examControl.totalQuestions = totalQuestions;
     }
-    if (countdownDuration !== undefined) {
-      // Validate countdown duration (20 seconds to 5 minutes)
-      if (countdownDuration >= 20 && countdownDuration <= 300) {
-        examControl.countdownDuration = countdownDuration;
-      }
-    }
+
 
     // Recalculate duration
     examControl.calculatedDuration = examControl.totalQuestions * examControl.questionTimeLimit;
@@ -504,7 +410,6 @@ exports.updateExamSettings = async (req, res) => {
       questionTimeLimit: examControl.questionTimeLimit,
       totalQuestions: examControl.totalQuestions,
       calculatedDuration: examControl.calculatedDuration,
-      countdownDuration: examControl.countdownDuration,
       disqualifyOnFullscreenExit: examControl.disqualifyOnFullscreenExit
     });
 

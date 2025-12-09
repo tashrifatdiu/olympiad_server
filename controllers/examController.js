@@ -100,8 +100,7 @@ exports.startExam = async (req, res) => {
           currentGlobalQuestion: currentGlobalQuestion,
           isWaitingForStart: true,
           actualStartTime: examControl.examStartTime,
-          countdownStartTime: examControl.countdownStartTime,
-          countdownDuration: examControl.countdownDuration
+          countdownStartTime: examControl.countdownStartTime
         });
       }
     }
@@ -175,8 +174,7 @@ exports.startExam = async (req, res) => {
       currentGlobalQuestion: currentGlobalQuestion, // Send current question
       isWaitingForStart: isWaiting, // Tell frontend to wait
       actualStartTime: examControl.examStartTime, // When exam will actually start
-      countdownStartTime: examControl.countdownStartTime, // When countdown started
-      countdownDuration: examControl.countdownDuration // Total countdown duration
+      countdownStartTime: examControl.countdownStartTime // When countdown started
     });
   } catch (error) {
     console.error('Error in startExam:', error);
@@ -211,8 +209,7 @@ exports.startExam = async (req, res) => {
             currentGlobalQuestion: currentGlobalQuestion,
             isWaitingForStart: existingSession.isWaitingForStart,
             actualStartTime: examControl.examStartTime,
-            countdownStartTime: examControl.countdownStartTime,
-            countdownDuration: examControl.countdownDuration
+            countdownStartTime: examControl.countdownStartTime
           });
         }
       } catch (fetchError) {

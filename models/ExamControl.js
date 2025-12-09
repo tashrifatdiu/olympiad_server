@@ -45,12 +45,7 @@ const examControlSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  countdownDuration: {
-    type: Number,
-    default: 30, // seconds (20 sec to 5 min = 300 sec)
-    min: 20,
-    max: 300
-  }
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('ExamControl', examControlSchema);
