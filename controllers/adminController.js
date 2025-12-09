@@ -80,7 +80,8 @@ exports.scheduleExam = async (req, res) => {
     examControl.calculatedDuration = calculatedDuration;
     examControl.currentGlobalQuestion = 0;
     examControl.lastQuestionChangeTime = scheduledTime;
-    examControl.countdownDuration = countdownSeconds;
+    // Don't save countdownDuration to avoid validation error (it has max: 300)
+    // countdownDuration is only used for immediate start, not scheduled
     await examControl.save();
 
     // Emit to all students immediately (if socket.io is available)

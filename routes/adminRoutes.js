@@ -5,6 +5,11 @@ const adminMiddleware = require('../middlewares/adminMiddleware');
 
 router.post('/login', adminController.login);
 router.post('/exam/start', adminMiddleware, adminController.startExamForAll);
+// Test endpoint without middleware
+router.post('/exam/schedule-test', (req, res) => {
+  res.json({ message: 'Schedule endpoint is reachable', body: req.body });
+});
+
 router.post('/exam/schedule', adminMiddleware, adminController.scheduleExam);
 router.post('/exam/stop', adminMiddleware, adminController.stopExamForAll);
 router.post('/exam/clear', adminMiddleware, adminController.clearExamData);
