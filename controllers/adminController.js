@@ -83,13 +83,18 @@ exports.scheduleExam = async (req, res) => {
     examControl.countdownDuration = countdownSeconds;
     await examControl.save();
 
-    // Emit to all students immediately
-    req.io.emit('exam-countdown-started', {
-      countdownSeconds: countdownSeconds,
-      countdownStartTime: now,
-      actualStartTime: scheduledTime,
-      message: `Exam scheduled to start at ${scheduledTime.toLocaleString()}`
-    });
+    // Emit to all students immediately (if socket.io is available)
+    if (req.io) {
+      req.io.emit('exam-countdown-started', {
+        countdownSeconds: countdownSeconds,
+        countdownStartTime: now,
+        actualStartTime: scheduledTime,
+        message: `Exam scheduled to start at ${scheduledTime.toLocaleString()}`
+      });
+      console.log('Emitted exam-countdown-started event');
+    } else {
+      console.warn('Socket.io not available, skipping event emission');
+    }
 
     // NOTE: We don't use setTimeout on production servers (they can restart)
     // Instead, the exam will auto-start when students check status after scheduled time
@@ -104,7 +109,12 @@ exports.scheduleExam = async (req, res) => {
     });
   } catch (error) {
     console.error('Schedule exam error:', error);
-    res.status(500).json({ message: 'Failed to schedule exam', error: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to schedule exam', 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
